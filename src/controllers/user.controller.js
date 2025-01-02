@@ -3,7 +3,7 @@ import {ApiError} from "../utils/ApiError.js"
 import {uploadOnCloudinary} from "../utils/cloudinary.js"
 import {User} from "../models/user.models.js"
 import {ApiResponse} from "../utils/ApiResponse.js"
-
+import jwt from "jsonwebtoken"
 
 
 const generateAccessAndRefereshTokens = async(userId) =>{
@@ -23,6 +23,7 @@ const generateAccessAndRefereshTokens = async(userId) =>{
     }
 }
 
+
 const registerUser = asyncHandler( async (req, res) => {
     // get user details from frontend
     // validation - not empty
@@ -36,7 +37,7 @@ const registerUser = asyncHandler( async (req, res) => {
 
 
     const {fullname, email, username, password } = req.body
-    //console.log("testing email : ", email);
+    //console.log("email: ", email);
 
     if (
         [fullname, email, username, password].some((field) => field?.trim() === "")
@@ -97,6 +98,7 @@ const registerUser = asyncHandler( async (req, res) => {
 
 } )
 
+
 const loginUser = asyncHandler(async (req, res) =>{
     // req body -> data
     // username or email
@@ -104,19 +106,21 @@ const loginUser = asyncHandler(async (req, res) =>{
     //password check
     //access and referesh token
     //send cookie
-
+   // console.log(req.body);
+   
+    console.log(req.body)
     const {email, username, password} = req.body
-    //console.log("email ", email);
-
-    // if (!username && !email) {
-    //     throw new ApiError(400, "username or email is required")
-    // }
     
-    //Here is an alternative of above code based on logic discussed in video:
-    if (!(username || email)) {
+    console.log(username, email, password);
+    if (!username && !email) {
         throw new ApiError(400, "username or email is required")
-        
     }
+   
+    // Here is an alternative of above code based on logic discussed in video:
+    // if (!(username || email)) {
+    //     throw new ApiError(400, "username or email is required")
+        
+    // }
 
     const user = await User.findOne({
         $or: [{username}, {email}]
@@ -157,6 +161,7 @@ const loginUser = asyncHandler(async (req, res) =>{
 
 })
 
+
 const logoutUser = asyncHandler(async(req, res) => {
     await User.findByIdAndUpdate(
         req.user._id,
@@ -183,8 +188,260 @@ const logoutUser = asyncHandler(async(req, res) => {
 })
 
 
+const refreshAccessToken = asyncHandler(async (req, res) =>{
+
+    const incomingRefreshToken = req.cookies.refreshToken || req.body.refreshToken
+
+    if(!incomingRefreshToken) {
+        throw new ApiError(401, "Unauthorized request")
+    }
+
+    try {
+        const decodedToken = jwt.verify(incomingRefreshToken, process.env.REFRESH_TOKEN_SECRET)
+    
+        const user = await User.findById(decodedToken?._id)
+    
+        if(!user) {
+            throw new ApiError(401, "Invalid refresh token")
+        }
+    
+        if(incomingRefreshToken !== user?.refreshToken) {
+            throw new ApiError(401, "Refresh token is expired or used")
+        }
+    
+        const options = {
+            httpOnly: true,
+            secure: true
+        } 
+        
+        const {newRefreshToken, accessToken} = await generateAccessAndRefereshTokens(user._id)
+    
+        return res
+        .status(200)
+        .cookie("accessToken", accessToken, options)
+        .cookie("refreshToken", newRefreshToken, options)
+        .json(
+            new ApiResponse(
+                200,
+                {accessToken, refreshToken: newRefreshToken},
+                "Access token refreshed"
+            )
+        )
+    } catch (error) {
+        throw new ApiError(401, error?.message || "Invalid refresh token")
+    }
+})
+
+
+const changePassword = asyncHandler(async (req, res) => {
+
+    const { oldPassword, newPassword } = req.body
+
+    const user = await User.findById(req.body?._id)
+
+    const isPasswordCorrect = await user.isPasswordCorrect(oldPassword)
+
+    if(!isPasswordCorrect) {
+        throw new ApiError(400, "Invalid password")
+    }
+
+    user.password = newPassword
+    await user.save({validateBeforeSave: false})
+
+    return res
+    .status(200)
+    .json(new ApiResponse(200, {}, "Password changed successfully"))
+
+
+})
+
+
+const getCurrentUser = asyncHandler(async (req, res) => {
+    return res
+    .status(200)
+    .json(new ApiResponse(200, req.user, "current user fetched successfully"))
+})
+
+
+const updateAccountDetails = asyncHandler( async (req, res) => {
+    const {fullname, email} = req.body
+
+    if(!fullname || !email) {
+        throw new ApiError(400, "All field are required");    
+    }
+
+    const user = await User.findByIdAndUpdate(
+        req.user?._id,
+        {
+            $set: {
+                fullname,
+                email: email
+            }
+        },
+        {new: true}
+
+    ).select("-password")
+
+    return res
+    .status(200)
+    .json(new ApiResponse(200,
+        user, "Account details updated successfully"
+    ))
+
+})
+
+const updateUserAvatar = asyncHandler(async (req, res) => {
+    const avatarLocalPath = req.file?.path
+
+    if(!avatarLocalPath) {
+        throw new ApiError(400, "Avatar file is missing")
+    }
+
+    const avatar =  await uploadOnCloudinary(avatarLocalPath)
+
+    if(!avatar.url) {
+        throw new ApiError(400, "Error while uploading on cloudinary")
+    }
+
+    const user = await User.findByIdAndUpdate(
+        req.user?._id,
+        {
+            $set: {
+                avatar: avatar.url
+            }
+        },
+        {new: true}
+    ).select("-password")
+
+    return res
+    .status(200)
+    .json(
+        new ApiResponse(
+            200,
+            user,
+            "avatar image updated successfully"
+        )
+    )
+}) 
+
+
+const updateUserCover = asyncHandler(async (req, res) => {
+    const CoverImageLocalPath = req.file?.path
+
+    if(!CoverImageLocalPath) {
+        throw new ApiError(400, "Cover image file is missing")
+    }
+
+    const CoverImage =  await uploadOnCloudinary(CoverImageLocalPath)
+
+    if(!CoverImage.url) {
+        throw new ApiError(400, "Error while uploading on cloudinary")
+    }
+
+    await User.findByIdAndUpdate(
+        req.user?._id,
+        {
+            $set: {
+                CoverImage: CoverImage.url
+            }
+        },
+        {new: true}
+    ).select("-password")
+
+    return res
+    .status(200)
+    .json(
+        new ApiResponse(
+            200,
+            user,
+            "Cover image updated successfully"
+        )
+    )
+}) 
+
+
+const getUserChannelProfile = asyncHandler(async (req, res) => {
+
+    const {username} = req.params
+
+    if(!username?.trim()) {
+        throw new ApiError(400, "username is missing")
+    }
+
+    const channel = User.aggregate([
+        {
+            $match: {
+                username: username?.toLowerCase()
+            }
+        },
+        {
+            $lookup: {
+                from: "subscriptions",
+                localField: "_id",
+                foreignField: "channel",
+                as: "subscriber"
+            }
+        },
+        {
+            $lookup: {
+                from: "subscriptions",
+                localField: "_id",
+                foreignField: "subscriber",
+                as: "subscribedTo"
+            }
+        }, 
+        {
+            $addFields: {
+                subscriberCount : {
+                    $size: "$subscribers"
+                },
+                channelSubscribedToCount: {
+                    $size: "$subscribedTo"
+                },
+                isSubscribed: {
+                    $cond: {
+                        if: {$in: [req.user?._id, "$subscribers.subscriber"]},
+                        then: true,
+                        else: false
+                    }
+                }
+            }
+        },
+        {
+            $project: {
+                fullname: 1,
+                username: 1,
+                subscriberCount: 1,
+                channelSubscribedToCount: 1,
+                isSubscribed: 1,
+                avatar: 1,
+                coverImage: 1,
+                email: 1
+            }
+        }
+    ])
+
+    if(!channel?.length) {
+        throw  new ApiError(404, "channel does not exits")
+    }
+
+    return res
+    .status(200)
+    .json(
+        new ApiResponse(200, channel[0], "user channel feteched successfully")
+    )
+})
+
+
 export {
-  registerUser,
-  loginUser,
-  logoutUser
+    loginUser,
+    registerUser,
+    logoutUser, 
+    refreshAccessToken,
+    changePassword,
+    getCurrentUser,
+    updateAccountDetails,
+    updateUserAvatar,
+    updateUserCover,
+    getUserChannelProfile
 }
