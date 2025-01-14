@@ -7,6 +7,7 @@ import {
 } from '../controllers/comments.controller.js'
 import { verifyJWT } from '../middlewares/auth.middlewire.js'
 
+
 const router = Router()
 
 router.use(verifyJWT)
