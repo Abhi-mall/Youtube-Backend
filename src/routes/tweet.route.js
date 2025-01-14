@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { verifyJWT } from '../middlewares/auth.middlewire.js'
+import { auth } from '../middlewares/auth.middlewire.js'
 import {
     createTweet,
     getUserTweets,
@@ -8,7 +8,7 @@ import {
 } from '../controllers/tweets.controller.js'
 
 const router = Router()
-router.use(verifyJWT)
+router.use(auth)
 
 router.route('/').post(createTweet)
 router.route('/user/:userId').get(getUserTweets)

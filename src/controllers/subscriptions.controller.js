@@ -1,48 +1,44 @@
-import mongoose, {isValidObjectId} from "mongoose"
-import { Subscription } from "../models/subscription.model.js"
-import {ApiError} from "../utils/ApiError.js"
-import {ApiResponse} from "../utils/ApiResponse.js"
-import {asyncHandler} from "../utils/asyncHandler.js"
-
+import { asyncHandler } from '../utils/AsyncHandler.util.js'
+import { Subscription } from '../models/subscriptions.model.js'
+import { ApiResponse } from '../utils/ApiResponse.util.js'
+import { ApiError } from '../utils/ApiError.util.js'
+import mongoose, { isValidObjectId } from 'mongoose'
 
 const toggleSubscription = asyncHandler(async (req, res) => {
-    const {channelId} = req.params
-    // TODO: toggle subscription
-    if(!channelId) {
-        throw new ApiError(400, "Channel is required")
-    }
+    const { channelId } = req.params
 
+    if (!channelId) throw new ApiError(400, 'Channel ID is required')
+
+    // check if user is already subscribed to the channel
     const isSubscribed = await Subscription.findOne({
+        subscriber: req.user._id,
         channel: channelId,
-        subscriber: req.user._id
     })
 
-    if(isSubscribed) {
+    if (isSubscribed) {
+        // if subscribed, then unsubscribe
         await Subscription.deleteOne({
             subscriber: req.user._id,
             channel: channelId,
         })
         return res
-        .status(200)
-        .json(
-            new ApiResponse(200, {}, "Unsuscribed successfully")
-        )
+            .status(200)
+            .json(new ApiResponse(200, {}, 'Unsubscribed successfully'))
     } else {
+        // if not subscribed, then subscribe
         await Subscription.create({
             subscriber: req.user._id,
             channel: channelId,
         })
         return res
-        .status(200)
-        .json(
-            new ApiResponse(200, {}, "Subscribed successfully")
-        )
+            .status(200)
+            .json(new ApiResponse(200, {}, 'Subscribed successfully'))
     }
 })
 
 // controller to return subscriber list of a channel
 const getUserChannelSubscribers = asyncHandler(async (req, res) => {
-    const {channelId} = req.params
+    const { channelId } = req.params
 
     if (!channelId) throw new ApiError(400, 'Channel ID is required')
 
@@ -54,7 +50,7 @@ const getUserChannelSubscribers = asyncHandler(async (req, res) => {
         },
         {
             $lookup: {
-                from: 'user',
+                from: 'users',
                 localField: 'subscriber',
                 foreignField: '_id',
                 as: 'subscribers',
@@ -62,37 +58,37 @@ const getUserChannelSubscribers = asyncHandler(async (req, res) => {
                     {
                         $project: {
                             username: 1,
-                            fullnmae: 1,
+                            fullName: 1,
                             email: 1,
-                        }
-                    }
-                ]
-            }
+                        },
+                    },
+                ],
+            },
         },
         {
             $addFields: {
                 subscriber: {
-                    $arrayElemAt: ['$subscribers', 0]
+                    $arrayElemAt: ['$subscribers', 0],
                 },
-            }
+            },
         },
         {
             $project: {
-                subscriber: 1,
+                subscribers: 1,
                 _id: 0,
-            }
-        }
+            },
+        },
     ])
 
     return res
-    .status(200)
-    .json(
-        new ApiResponse(
-            200,
-            subscribers,
-            'Subscribers fetched successfully'
+        .status(200)
+        .json(
+            new ApiResponse(
+                200,
+                subscribers,
+                'Subscribers fetched successfully'
+            )
         )
-    )
 })
 
 // controller to return channel list to which user has subscribed
@@ -148,8 +144,4 @@ const getSubscribedChannels = asyncHandler(async (req, res) => {
         )
 })
 
-export {
-    toggleSubscription,
-    getUserChannelSubscribers,
-    getSubscribedChannels
-}
+export { toggleSubscription, getUserChannelSubscribers, getSubscribedChannels }

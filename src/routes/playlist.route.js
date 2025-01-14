@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { verifyJWT } from '../middlewares/auth.middlewire.js'
+import { auth } from '../middlewares/auth.middlewire.js'
 import {
     createPlaylist,
     getPlaylistById,
@@ -12,7 +12,7 @@ import {
 
 const router = Router()
 
-router.use(verifyJWT)
+router.use(auth)
 
 router.route('/').post(createPlaylist)
 

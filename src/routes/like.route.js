@@ -1,4 +1,3 @@
-
 import { Router } from 'express'
 import {
     getLikedVideos,
@@ -6,10 +5,10 @@ import {
     toggleVideoLike,
     toggleTweetLike,
 } from '../controllers/likes.controller.js'
-import { verifyJWT } from '../middlewares/auth.middlewire.js'
+import { auth } from '../middlewares/auth.middlewire.js'
 
 const router = Router()
-router.use(verifyJWT)
+router.use(auth)
 
 router.route('/toggle/v/:videoId').post(toggleVideoLike)
 router.route('/toggle/c/:commentId').post(toggleCommentLike)
